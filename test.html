@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase OTP Login</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; }
+        .container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; width: 300px; }
+        input { width: 100%; margin: 10px 0; padding: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #039be5; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        #verification-section { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>OTP Login</h2>
+    
+    <!-- Step 1: Send OTP -->
+    <div id="login-section">
+        <input type="text" id="phone" placeholder="+919876543210">
+        <div id="recaptcha-container"></div>
+        <button onclick="sendOTP()">Send OTP</button>
+    </div>
+
+    <!-- Step 2: Verify OTP -->
+    <div id="verification-section">
+        <input type="text" id="otp" placeholder="Enter 6-digit OTP">
+        <button onclick="verifyOTP()">Verify Code</button>
+    </div>
+</div>
+
+<!-- Firebase SDKs -->
+<script type="module">
+    import { initializeApp } from "https://gstatic.com";
+    import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "https://gstatic.com";
+
+    // Your provided config
+    const firebaseConfig = {
+        apiKey: "AIzaSyDx_0L5eTj9XKWp0-YdnrXeF4v1VFAfB5Y",
+        authDomain: "zafy-fashion.firebaseapp.com",
+        projectId: "zafy-fashion",
+        storageBucket: "zafy-fashion.firebasestorage.app",
+        messagingSenderId: "319734967202",
+        appId: "1:319734967202:web:1d2d3340e9f01e3c2d60fb",
+        measurementId: "G-LEPXC49PZ0"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    // Setup Recaptcha
+    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'normal'
+    });
+
+    window.sendOTP = function() {
+        const phoneNumber = document.getElementById('phone').value;
+        const appVerifier = window.recaptchaVerifier;
+
+        signInWithPhoneNumber(auth, phoneNumber, appVerifier)
+            .then((confirmationResult) => {
+                window.confirmationResult = confirmationResult;
+                document.getElementById('login-section').style.display = 'none';
+                document.getElementById('verification-section').style.display = 'block';
+                alert("OTP Sent!");
+            }).catch((error) => {
+                alert("Error: " + error.message);
+            });
+    }
+
+    window.verifyOTP = function() {
+        const code = document.getElementById('otp').value;
+        window.confirmationResult.confirm(code).then((result) => {
+            const user = result.user;
+            alert("Login Successful! User ID: " + user.uid);
+        }).catch((error) => {
+            alert("Invalid OTP: " + error.message);
+        });
+    }
+</script>
+
+</body>
+</html>

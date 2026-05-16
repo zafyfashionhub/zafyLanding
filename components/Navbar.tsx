@@ -106,15 +106,15 @@ export default function Navbar() {
               <Search size={24} />
             </button>
 
-            {/* Wishlist */}
+            {/* Wishlist
             <Link href="/account/wishlist" className="hidden md:block">
               <Heart size={24} />
-            </Link>
+            </Link> */}
 
-            {/* Account */}
+            {/* Account
             <button onClick={handleUserClick}>
               <User size={24} />
-            </button>
+            </button> */}
 
             {/* Cart */}
             <Link href="/cart" className="relative">

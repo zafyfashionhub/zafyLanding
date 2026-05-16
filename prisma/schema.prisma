@@ -70,6 +70,8 @@ model User {
   wishlists  Wishlist[]
   cartItems  CartItem[]
   addresses  Address[]
+  phone           String?   @unique
+  phoneVerified   Boolean   @default(false)
 
   @@map("users")
 }
@@ -121,9 +123,8 @@ model Product {
 // ====================== ORDER (Selloship Ready) ======================
 model Order {
   id                    Int      @id @default(autoincrement())
-  userId                Int      // NOT NULL
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  userId                Int?
+  user                  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   orderNumber           String   @unique
   // ✅ ADD THESE (CRITICAL)
   

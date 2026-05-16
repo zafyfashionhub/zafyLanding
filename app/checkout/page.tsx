@@ -1,7 +1,6 @@
 // app/checkout/page.tsx
 "use client";
 
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
@@ -25,7 +24,17 @@ const INDIAN_STATES = [
   "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
 ];
 
-const EMPTY_FORM = { name: "", phone: "", address: "", city: "", state: "", pincode: "", landmark: "" };
+const EMPTY_FORM = {
+  name: "",
+  phone: "",
+  confirmPhone: "",
+  email: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+  landmark: ""
+};
 
 type PaymentState = "idle" | "creating_order" | "awaiting_payment" | "verifying" | "success" | "failed";
 type FieldErrors = Record<string, string>;
@@ -59,8 +68,8 @@ function AddressForm({ form, setField, fieldErrors, loading, onSave, onCancel }:
         autoComplete="off"
         onChange={(e) => setField(id)(e.target.value)}
         className={`w-full border px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 transition ${fieldErrors[id]
-            ? "border-red-400 focus:ring-red-100"
-            : "border-gray-300 focus:border-black focus:ring-black/10"
+          ? "border-red-400 focus:ring-red-100"
+          : "border-gray-300 focus:border-black focus:ring-black/10"
           }`}
       />
       {fieldErrors[id] && <p className="text-red-500 text-xs mt-1">⚠ {fieldErrors[id]}</p>}
@@ -72,7 +81,17 @@ function AddressForm({ form, setField, fieldErrors, loading, onSave, onCancel }:
       <h3 className="font-medium text-sm mb-1">New Delivery Address</h3>
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2 sm:col-span-1">{inp("name", "Full Name", "Rahul Sharma", { required: true })}</div>
-        <div className="col-span-2 sm:col-span-1">{inp("phone", "Mobile No.", "9876543210", { required: true, type: "tel", maxLength: 10 })}</div>
+        <div className="col-span-2 sm:col-span-1">
+          {inp("phone", "Mobile No.", "9876543210", { required: true, type: "tel", maxLength: 10 })}
+        </div>
+
+        <div className="col-span-2 sm:col-span-1">
+          {inp("confirmPhone", "Confirm Mobile No.", "9876543210", { required: true, type: "tel", maxLength: 10 })}
+        </div>
+
+        <div className="col-span-2">
+          {inp("email", "Email (Optional)", "you@example.com", { type: "email" })}
+        </div>
         <div className="col-span-2">               {inp("address", "Flat/Street", "Flat 101, MG Road", { required: true })}</div>
         <div>                                      {inp("city", "City", "Surat", { required: true })}</div>
 
@@ -103,11 +122,9 @@ function AddressForm({ form, setField, fieldErrors, loading, onSave, onCancel }:
           disabled={loading}
           className="flex-1 bg-black text-white py-2.5 rounded-xl text-sm font-medium disabled:bg-gray-400 transition"
         >
-          {loading ? "Saving…" : "Save & Use This Address"}
+          {loading ? "Saving…" : "Use This Address"}
         </button>
-        <button onClick={onCancel} className="px-4 py-2.5 border border-gray-300 rounded-xl text-sm hover:bg-gray-50 transition">
-          Cancel
-        </button>
+
       </div>
     </div>
   );
@@ -118,6 +135,7 @@ function validateAddr(form: typeof EMPTY_FORM): FieldErrors {
   const e: FieldErrors = {};
   if (!form.name.trim() || form.name.trim().length < 2) e.name = "At least 2 characters";
   if (!/^\d{10}$/.test(form.phone.trim())) e.phone = "Valid 10-digit number (no +91)";
+  if (form.phone !== form.confirmPhone) e.confirmPhone = "Phone numbers do not match";
   if (!form.address.trim() || form.address.trim().length < 10) e.address = "Complete address required (min 10 chars)";
   if (!form.city.trim()) e.city = "Required";
   if (!form.state) e.state = "Select a state";
@@ -127,7 +145,6 @@ function validateAddr(form: typeof EMPTY_FORM): FieldErrors {
 
 // ─── Main Checkout Page ───────────────────────────────────────────────────────
 export default function CheckoutPage() {
-  const { data: session, status } = useSession();
   const router = useRouter();
 
   const [cart, setCart] = useState<any[]>([]);
@@ -156,57 +173,114 @@ export default function CheckoutPage() {
   }, []);
 
   // ── Load addresses ─────────────────────────────────────────────────────────
-  const loadAddresses = useCallback(async () => {
+  const loadAddresses = useCallback(() => {
     try {
-      const res = await fetch("/api/user/addresses", { cache: "no-store" });
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : [];
+      const local =
+        localStorage.getItem("guest_addresses");
+
+      const list = local ? JSON.parse(local) : [];
+
       setSavedAddresses(list);
+
       if (list.length > 0) {
-        const def = list.find((a: any) => a.isDefault);
-        setSelectedAddressId(def ? def.id.toString() : list[0].id.toString());
+        setSelectedAddressId(
+          list[0].id.toString()
+        );
         setShowAddForm(false);
       } else {
-        setShowAddForm(true); // auto-open form if no addresses
+        setShowAddForm(true);
       }
+
     } catch {
       setSavedAddresses([]);
+      setShowAddForm(true);
     }
   }, []);
 
   useEffect(() => {
-    if (session?.user?.id) loadAddresses();
-  }, [session, loadAddresses]);
+    loadAddresses();
+  }, [loadAddresses]);
 
   // ── Save new address ───────────────────────────────────────────────────────
+  // const saveAddress = async () => {
+  //   const errs = validateAddr(addrForm);
+  //   if (Object.keys(errs).length > 0) { setAddrFieldErrors(errs); return; }
+
+  //   setAddrLoading(true);
+  //   setErrorMsg(null);
+  //   try {
+  // const res = await fetch("/api/user/addresses", {
+  //   method: "POST",
+  //   headers: { "Content-Type": "application/json" },
+  //   body: JSON.stringify({
+  //     name: addrForm.name.trim(),
+  //     phone: addrForm.phone.trim(),
+  //     address: addrForm.address.trim(),
+  //     city: addrForm.city.trim(),
+  //     state: addrForm.state,
+  //     pincode: addrForm.pincode.trim(),
+  //     landmark: addrForm.landmark.trim(),
+  //   }),
+  // });
+  //     const data = await res.json();
+  //     if (!res.ok) { setErrorMsg(data.error || "Failed to save address"); return; }
+
+  //     setAddrForm({ ...EMPTY_FORM });
+  //     setAddrFieldErrors({});
+  //     await loadAddresses(); // reloads + auto-selects new address
+  //   } catch {
+  //     setErrorMsg("Network error saving address");
+  //   } finally {
+  //     setAddrLoading(false);
+  //   }
+  // };
+
   const saveAddress = async () => {
     const errs = validateAddr(addrForm);
-    if (Object.keys(errs).length > 0) { setAddrFieldErrors(errs); return; }
+
+    if (Object.keys(errs).length > 0) {
+      setAddrFieldErrors(errs);
+      return;
+    }
 
     setAddrLoading(true);
     setErrorMsg(null);
-    try {
-      const res = await fetch("/api/user/addresses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: addrForm.name.trim(),
-          phone: addrForm.phone.trim(),
-          address: addrForm.address.trim(),
-          city: addrForm.city.trim(),
-          state: addrForm.state,
-          pincode: addrForm.pincode.trim(),
-          landmark: addrForm.landmark.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setErrorMsg(data.error || "Failed to save address"); return; }
 
+    try {
+      const newAddress = {
+        id: Date.now(),
+        name: addrForm.name.trim(),
+        phone: addrForm.phone.trim(),
+        email: addrForm.email.trim(),
+        address: addrForm.address.trim(),
+        city: addrForm.city.trim(),
+        state: addrForm.state,
+        pincode: addrForm.pincode.trim(),
+        landmark: addrForm.landmark.trim(),
+        isDefault: true,
+      };
+
+      // save in localStorage
+      localStorage.setItem(
+        "guest_addresses",
+        JSON.stringify([newAddress])
+      );
+
+      // update state instantly
+      setSavedAddresses([newAddress]);
+
+      // auto select
+      setSelectedAddressId(
+        newAddress.id.toString()
+      );
+
+      // reset form
       setAddrForm({ ...EMPTY_FORM });
       setAddrFieldErrors({});
-      await loadAddresses(); // reloads + auto-selects new address
+      setShowAddForm(false);
+
     } catch {
-      setErrorMsg("Network error saving address");
+      setErrorMsg("Failed to save address");
     } finally {
       setAddrLoading(false);
     }
@@ -293,7 +367,11 @@ export default function CheckoutPage() {
         order_id: rzpOrder.id,
         name: "Zafy Fashion",
         description: `Order #${orderNumber}`,
-        prefill: { name: session?.user?.name || "", email: session?.user?.email || "", contact: addr.phone || "" },
+        prefill: {
+          name: addr.name || "",
+          email: addr.email || "",
+          contact: addr.phone || ""
+        },
         theme: { color: "#000000" },
         handler: async (response: any) => {
           setPaymentState("verifying");
@@ -316,55 +394,70 @@ export default function CheckoutPage() {
           finally { destroyRzp(); }
         },
         modal: {
-          escape: false, backdropclose: false,
-          ondismiss: () => { destroyRzp(); localStorage.removeItem("cart"); router.push(`/account?pending=${orderNumber}`); },
+          escape: true,
+          backdropclose: true,
+
+          ondismiss: async () => {
+
+            destroyRzp();
+
+            try {
+
+              // mark order cancelled
+              await fetch("/api/payment/cancel", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+
+                body: JSON.stringify({
+                  orderNumber,
+                }),
+              });
+
+            } catch (err) {
+              console.error(err);
+            }
+
+            router.push(
+              `/payment-cancelled?orderNumber=${orderNumber}`
+            );
+          },
         },
       });
-      rzpRef.current.on("payment.failed", () => {
-        destroyRzp(); localStorage.removeItem("cart"); router.push(`/account?pending=${orderNumber}&reason=failed`);
-      });
+      rzpRef.current.on(
+        "payment.failed",
+        async () => {
+
+          destroyRzp();
+
+          try {
+
+            await fetch("/api/payment/cancel", {
+              method: "POST",
+
+              headers: {
+                "Content-Type": "application/json",
+              },
+
+              body: JSON.stringify({
+                orderNumber,
+              }),
+            });
+
+          } catch (err) {
+            console.error(err);
+          }
+
+          router.push(
+            `/payment-cancelled?orderNumber=${orderNumber}`
+          );
+        }
+      );
       rzpRef.current.open();
 
     } catch { setErrorMsg("Something went wrong"); setPaymentState("failed"); }
   };
-
-  // ── Auth guard — show login CTA, don't redirect ────────────────────────────
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen bg-white">
-        <Navbar />
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin" />
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (status === "unauthenticated") {
-    return (
-      <div className="min-h-screen bg-white">
-        <Navbar />
-        <div className="max-w-md mx-auto px-6 py-24 text-center">
-          <div className="text-6xl mb-6">🔐</div>
-          <h1 className="text-2xl font-semibold mb-3">Login to Checkout</h1>
-          <p className="text-gray-500 mb-8 text-sm leading-relaxed">
-            Please login to place your order. Your cart will be saved.
-          </p>
-          <Link
-            href={`/auth/signin?callbackUrl=/checkout`}
-            className="block w-full bg-black text-white py-4 rounded-2xl font-medium hover:bg-gray-900 transition text-center"
-          >
-            Login / Sign Up
-          </Link>
-          <Link href="/" className="block mt-4 text-sm text-gray-500 hover:underline">
-            ← Continue Shopping
-          </Link>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
 
   const maxReached = savedAddresses.length >= 5;
 
@@ -404,8 +497,8 @@ export default function CheckoutPage() {
                     <label
                       key={addr.id}
                       className={`flex gap-3 items-start border p-4 rounded-2xl cursor-pointer transition ${selectedAddressId === addr.id.toString()
-                          ? "border-black bg-gray-50 shadow-sm"
-                          : "border-gray-200 hover:border-gray-300"
+                        ? "border-black bg-gray-50 shadow-sm"
+                        : "border-gray-200 hover:border-gray-300"
                         }`}
                     >
                       <input
