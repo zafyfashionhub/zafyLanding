@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "zafyfashion.com"
+        }
+      ],
+      "destination": "https://www.zafyfashion.com/:path*",
+      "permanent": true
+    }
+  ]
+}
